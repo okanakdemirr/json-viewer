@@ -13,12 +13,23 @@ class JSONViewer {
             images: 0
         };
 
+        // Search state
+        this.searchMatches = [];
+        this.currentMatchIndex = -1;
+        this.searchOpen = false;
+
+        // History state
+        this.history = [];
+        this.maxHistoryItems = 20;
+        this.historyKey = 'json-viewer-history';
+
         this.init();
     }
 
     init() {
         this.bindElements();
         this.bindEvents();
+        this.loadHistory();
     }
 
     bindElements() {
@@ -61,6 +72,21 @@ class JSONViewer {
         this.closeGallery = document.getElementById('closeGallery');
         this.prevImage = document.getElementById('prevImage');
         this.nextImage = document.getElementById('nextImage');
+
+        // Search elements
+        this.searchBar = document.getElementById('searchBar');
+        this.searchInput = document.getElementById('searchInput');
+        this.searchCount = document.getElementById('searchCount');
+        this.searchPrev = document.getElementById('searchPrev');
+        this.searchNext = document.getElementById('searchNext');
+        this.searchClose = document.getElementById('searchClose');
+
+        // History elements
+        this.historyToggleBtn = document.getElementById('historyToggleBtn');
+        this.historySidebar = document.getElementById('historySidebar');
+        this.historyList = document.getElementById('historyList');
+        this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        this.closeHistoryBtn = document.getElementById('closeHistoryBtn');
     }
 
     bindEvents() {
@@ -87,6 +113,25 @@ class JSONViewer {
         this.nextImage.addEventListener('click', () => this.navigateGallery(1));
         this.copyPathBtn.addEventListener('click', () => this.copyGalleryText('path'));
         this.copyUrlBtn.addEventListener('click', () => this.copyGalleryText('url'));
+
+        // Search events
+        this.searchInput.addEventListener('input', () => this.performSearch());
+        this.searchPrev.addEventListener('click', () => this.navigateSearch(-1));
+        this.searchNext.addEventListener('click', () => this.navigateSearch(1));
+        this.searchClose.addEventListener('click', () => this.closeSearch());
+        this.searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.navigateSearch(e.shiftKey ? -1 : 1);
+            } else if (e.key === 'Escape') {
+                this.closeSearch();
+            }
+        });
+
+        // History events
+        this.historyToggleBtn.addEventListener('click', () => this.toggleHistory());
+        this.closeHistoryBtn.addEventListener('click', () => this.toggleHistory());
+        this.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
 
         // Keyboard events
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
@@ -211,6 +256,7 @@ class JSONViewer {
         try {
             this.jsonData = JSON.parse(input);
             this.errorMessage.classList.add('hidden');
+            this.addToHistory(input);
             this.renderJSON();
         } catch (err) {
             this.showError(`Invalid JSON: ${err.message}`);
@@ -680,6 +726,20 @@ class JSONViewer {
     }
 
     handleKeyboard(e) {
+        // Ctrl/Cmd + F to open search
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+            if (!this.outputSection.classList.contains('hidden')) {
+                e.preventDefault();
+                this.openSearch();
+            }
+        }
+
+        // Close search on Escape
+        if (e.key === 'Escape' && this.searchOpen) {
+            this.closeSearch();
+            return;
+        }
+
         // Close gallery on Escape
         if (e.key === 'Escape' && !this.imageGallery.classList.contains('hidden')) {
             this.closeImageGallery();
@@ -699,6 +759,265 @@ class JSONViewer {
             e.preventDefault();
             this.formatAndView();
         }
+    }
+
+    // ==================== SEARCH METHODS ====================
+
+    openSearch() {
+        this.searchOpen = true;
+        this.searchBar.classList.remove('hidden');
+        this.searchInput.focus();
+        this.searchInput.select();
+    }
+
+    closeSearch() {
+        this.searchOpen = false;
+        this.searchBar.classList.add('hidden');
+        this.searchInput.value = '';
+        this.clearSearchHighlights();
+        this.searchMatches = [];
+        this.currentMatchIndex = -1;
+        this.searchCount.textContent = '';
+    }
+
+    performSearch() {
+        const query = this.searchInput.value.trim().toLowerCase();
+        this.clearSearchHighlights();
+        this.searchMatches = [];
+        this.currentMatchIndex = -1;
+
+        if (!query) {
+            this.searchCount.textContent = '';
+            return;
+        }
+
+        // Find all text nodes in the JSON output that match
+        const walker = document.createTreeWalker(
+            this.jsonOutput,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.textContent.toLowerCase().includes(query)) {
+                textNodes.push(node);
+            }
+        }
+
+        // Highlight matches
+        textNodes.forEach(textNode => {
+            const text = textNode.textContent;
+            const lowerText = text.toLowerCase();
+            let lastIndex = 0;
+            const parts = [];
+            let index;
+
+            while ((index = lowerText.indexOf(query, lastIndex)) !== -1) {
+                if (index > lastIndex) {
+                    parts.push(document.createTextNode(text.substring(lastIndex, index)));
+                }
+                const mark = document.createElement('mark');
+                mark.className = 'search-match';
+                mark.textContent = text.substring(index, index + query.length);
+                parts.push(mark);
+                this.searchMatches.push(mark);
+                lastIndex = index + query.length;
+            }
+
+            if (lastIndex < text.length) {
+                parts.push(document.createTextNode(text.substring(lastIndex)));
+            }
+
+            if (parts.length > 0) {
+                const parent = textNode.parentNode;
+                parts.forEach(part => parent.insertBefore(part, textNode));
+                parent.removeChild(textNode);
+            }
+        });
+
+        // Update count and navigate to first match
+        if (this.searchMatches.length > 0) {
+            this.currentMatchIndex = 0;
+            this.updateSearchHighlight();
+            this.searchCount.textContent = `1 of ${this.searchMatches.length}`;
+        } else {
+            this.searchCount.textContent = 'No matches';
+        }
+    }
+
+    navigateSearch(direction) {
+        if (this.searchMatches.length === 0) return;
+
+        this.currentMatchIndex += direction;
+        if (this.currentMatchIndex < 0) {
+            this.currentMatchIndex = this.searchMatches.length - 1;
+        } else if (this.currentMatchIndex >= this.searchMatches.length) {
+            this.currentMatchIndex = 0;
+        }
+
+        this.updateSearchHighlight();
+        this.searchCount.textContent = `${this.currentMatchIndex + 1} of ${this.searchMatches.length}`;
+    }
+
+    updateSearchHighlight() {
+        // Remove current highlight from all
+        this.searchMatches.forEach(match => match.classList.remove('search-current'));
+
+        // Add current highlight to current match
+        if (this.currentMatchIndex >= 0 && this.currentMatchIndex < this.searchMatches.length) {
+            const currentMatch = this.searchMatches[this.currentMatchIndex];
+            currentMatch.classList.add('search-current');
+
+            // Expand any collapsed parents
+            let parent = currentMatch.parentElement;
+            while (parent && parent !== this.jsonOutput) {
+                if (parent.classList.contains('json-children') && parent.classList.contains('collapsed')) {
+                    parent.classList.remove('collapsed');
+                    const path = parent.getAttribute('data-path');
+                    const toggle = this.jsonOutput.querySelector(`.json-toggle[data-path="${path}"]`);
+                    if (toggle) toggle.textContent = '−';
+                }
+                parent = parent.parentElement;
+            }
+
+            // Scroll into view
+            currentMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    clearSearchHighlights() {
+        const marks = this.jsonOutput.querySelectorAll('mark.search-match');
+        marks.forEach(mark => {
+            const parent = mark.parentNode;
+            parent.replaceChild(document.createTextNode(mark.textContent), mark);
+            parent.normalize();
+        });
+    }
+
+    // ==================== HISTORY METHODS ====================
+
+    loadHistory() {
+        try {
+            const saved = localStorage.getItem(this.historyKey);
+            this.history = saved ? JSON.parse(saved) : [];
+        } catch (err) {
+            this.history = [];
+        }
+        this.renderHistory();
+    }
+
+    saveHistory() {
+        try {
+            localStorage.setItem(this.historyKey, JSON.stringify(this.history));
+        } catch (err) {
+            console.error('Failed to save history:', err);
+        }
+    }
+
+    addToHistory(jsonString) {
+        // Create history entry
+        const entry = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            json: jsonString,
+            size: jsonString.length,
+            preview: jsonString.substring(0, 100).replace(/\s+/g, ' ')
+        };
+
+        // Check if same JSON already exists (avoid duplicates)
+        const existingIndex = this.history.findIndex(h => h.json === jsonString);
+        if (existingIndex >= 0) {
+            // Move to top
+            this.history.splice(existingIndex, 1);
+        }
+
+        // Add to beginning
+        this.history.unshift(entry);
+
+        // Limit to max items
+        if (this.history.length > this.maxHistoryItems) {
+            this.history = this.history.slice(0, this.maxHistoryItems);
+        }
+
+        this.saveHistory();
+        this.renderHistory();
+    }
+
+    loadFromHistory(index) {
+        const entry = this.history[index];
+        if (entry) {
+            this.jsonInput.value = entry.json;
+            this.updateCharCount();
+            this.formatAndView();
+            this.toggleHistory(); // Close sidebar
+        }
+    }
+
+    deleteFromHistory(index, event) {
+        event.stopPropagation();
+        this.history.splice(index, 1);
+        this.saveHistory();
+        this.renderHistory();
+    }
+
+    clearHistory() {
+        if (confirm('Clear all history?')) {
+            this.history = [];
+            this.saveHistory();
+            this.renderHistory();
+        }
+    }
+
+    toggleHistory() {
+        this.historySidebar.classList.toggle('hidden');
+    }
+
+    renderHistory() {
+        if (this.history.length === 0) {
+            this.historyList.innerHTML = '<div class="history-empty">No history yet</div>';
+            return;
+        }
+
+        this.historyList.innerHTML = this.history.map((entry, index) => {
+            const date = new Date(entry.timestamp);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const sizeStr = entry.size > 1000 ? `${(entry.size / 1000).toFixed(1)}KB` : `${entry.size}B`;
+
+            return `
+                <div class="history-item" data-index="${index}">
+                    <div class="history-item-header">
+                        <span class="history-time">${dateStr} ${timeStr}</span>
+                        <span class="history-size">${sizeStr}</span>
+                    </div>
+                    <div class="history-preview">${this.escapeHTML(entry.preview)}</div>
+                    <button class="history-delete" data-index="${index}" title="Delete">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        // Bind click events
+        this.historyList.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const index = parseInt(item.getAttribute('data-index'));
+                this.loadFromHistory(index);
+            });
+        });
+
+        this.historyList.querySelectorAll('.history-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(btn.getAttribute('data-index'));
+                this.deleteFromHistory(index, e);
+            });
+        });
     }
 }
 
