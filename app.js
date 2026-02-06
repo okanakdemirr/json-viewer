@@ -138,6 +138,105 @@ class JSONViewer {
 
         // Initial char count
         this.updateCharCount();
+
+        // ========== NEW FEATURES ==========
+        this.bindTabEvents();
+        this.bindComparerEvents();
+    }
+
+    bindTabEvents() {
+        const tabs = document.querySelectorAll('.nav-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Update active tab button
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Show/Hide content
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById('jsonViewerTab').classList.add('hidden');
+                document.getElementById('textComparerTab').classList.add('hidden');
+
+                if (tabId === 'jsonViewer') {
+                    document.getElementById('jsonViewerTab').classList.remove('hidden');
+                } else {
+                    document.getElementById('textComparerTab').classList.remove('hidden');
+                }
+            });
+        });
+    }
+
+    bindComparerEvents() {
+        this.originalInput = document.getElementById('originalInput');
+        this.modifiedInput = document.getElementById('modifiedInput');
+        this.compareBtn = document.getElementById('compareBtn');
+        this.clearCompareBtn = document.getElementById('clearCompareBtn');
+        this.diffResult = document.getElementById('diffResult');
+        this.compareOutput = document.getElementById('compareOutput');
+        this.pasteOriginalBtn = document.getElementById('pasteOriginalBtn');
+        this.pasteModifiedBtn = document.getElementById('pasteModifiedBtn');
+
+        this.compareBtn.addEventListener('click', () => this.compareText());
+        this.clearCompareBtn.addEventListener('click', () => this.clearComparer());
+
+        this.pasteOriginalBtn.addEventListener('click', async () => {
+            try {
+                this.originalInput.value = await navigator.clipboard.readText();
+            } catch (e) {
+                alert('Failed to paste content');
+            }
+        });
+
+        this.pasteModifiedBtn.addEventListener('click', async () => {
+            try {
+                this.modifiedInput.value = await navigator.clipboard.readText();
+            } catch (e) {
+                alert('Failed to paste content');
+            }
+        });
+    }
+
+    compareText(saveToHistory = true) {
+        const original = this.originalInput.value;
+        const modified = this.modifiedInput.value;
+
+        if (!original && !modified) return;
+
+        try {
+            if (typeof Diff === 'undefined') {
+                throw new Error('Diff library not loaded');
+            }
+
+            // Use global Diff object from cdn
+            const diff = Diff.diffWordsWithSpace(original, modified);
+            const fragment = document.createDocumentFragment();
+
+            diff.forEach((part) => {
+                // green for additions, red for deletions
+                // grey for common parts
+                const span = document.createElement(part.added ? 'ins' : part.removed ? 'del' : 'span');
+                span.textContent = part.value;
+                fragment.appendChild(span);
+            });
+
+            this.diffResult.innerHTML = '';
+            this.diffResult.appendChild(fragment);
+            this.compareOutput.classList.remove('hidden');
+        } catch (err) {
+            console.error(err);
+            alert('Comparison failed: ' + err.message);
+        }
+
+        if (saveToHistory) {
+            this.addToHistory({ original, modified }, 'compare');
+        }
+    }
+
+    clearComparer() {
+        this.originalInput.value = '';
+        this.modifiedInput.value = '';
+        this.diffResult.innerHTML = '';
+        this.compareOutput.classList.add('hidden');
     }
 
     updateCharCount() {
@@ -256,7 +355,7 @@ class JSONViewer {
         try {
             this.jsonData = JSON.parse(input);
             this.errorMessage.classList.add('hidden');
-            this.addToHistory(input);
+            this.addToHistory({ content: input }, 'json');
             this.renderJSON();
         } catch (err) {
             this.showError(`Invalid JSON: ${err.message}`);
@@ -430,7 +529,7 @@ class JSONViewer {
         imageItems.forEach(item => {
             const index = this.imageData.findIndex(d => d.url === item.url && d.path === item.path);
             const actualIndex = index >= 0 ? index : this.imageData.length - 1;
-            html += `<img class="image-thumb" src="${this.escapeHTML(item.url)}" data-index="${actualIndex}" alt="Preview" onerror="this.classList.add('error'); this.alt='Failed to load';">`;
+            html += `<img class="image-thumb" src="${this.escapeHTML(item.url)}" data-index="${actualIndex}" alt="Preview" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
         });
         html += '</div>';
         return html;
@@ -458,32 +557,34 @@ class JSONViewer {
     isImageUrl(str) {
         if (!this.isUrl(str)) return false;
 
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif'];
-        const lowerStr = str.toLowerCase();
+        try {
+            const url = new URL(str);
+            const pathname = url.pathname.toLowerCase();
 
-        // Check file extension
-        if (imageExtensions.some(ext => lowerStr.includes(ext))) {
-            return true;
+            // Check file extension on the pathname (ignoring query params)
+            const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif'];
+            if (imageExtensions.some(ext => pathname.endsWith(ext))) {
+                return true;
+            }
+
+            // Check common image hosting patterns ensuring they are likely serving images directly
+            const imagePatterns = [
+                /unsplash\.com\/photo-/i,
+                /images\.unsplash\.com\/.+/i,
+                /pexels\.com\/.*\/.*-\d+/i,
+                /imgur\.com\/[a-zA-Z0-9]{7,}\.(jpg|png|gif)/i, // Direct imgur links usually have ext
+                /githubusercontent\.com\/.*\/.*\.(png|jpg|jpeg|gif|webp|svg)/i,
+                /randomuser\.me\/api\/portraits\//i,
+                /picsum\.photos\//i,
+                /via\.placeholder\.com\//i,
+                /placehold\.co\//i,
+                /\.s3\..*amazonaws\.com\/.*\.(jpg|jpeg|png|gif|webp)/i
+            ];
+
+            return imagePatterns.some(pattern => pattern.test(str));
+        } catch (e) {
+            return false;
         }
-
-        // Check common image hosting patterns
-        const imagePatterns = [
-            /unsplash\.com/i,
-            /pexels\.com/i,
-            /imgur\.com/i,
-            /cloudinary\.com/i,
-            /githubusercontent\.com/i,
-            /randomuser\.me.*\/portraits/i,
-            /picsum\.photos/i,
-            /placeholder\.com/i,
-            /via\.placeholder/i,
-            /images\..*\.com/i,
-            /img\..*\.com/i,
-            /cdn\..*\.(jpg|jpeg|png|gif|webp)/i,
-            /s3\..*amazonaws\.com.*\.(jpg|jpeg|png|gif|webp)/i
-        ];
-
-        return imagePatterns.some(pattern => pattern.test(str));
     }
 
     truncateUrl(url, maxLength = 60) {
@@ -574,6 +675,7 @@ class JSONViewer {
     updateGalleryImage() {
         const imageInfo = this.imageData[this.currentImageIndex];
         this.galleryImage.src = imageInfo.url;
+        this.galleryImage.referrerPolicy = "no-referrer";
         this.galleryPath.textContent = imageInfo.path || 'root';
         this.galleryUrl.textContent = imageInfo.url;
 
@@ -917,27 +1019,40 @@ class JSONViewer {
         }
     }
 
-    addToHistory(jsonString) {
-        // Create history entry
+    addToHistory(data, type = 'json') {
         const entry = {
             id: Date.now(),
             timestamp: new Date().toISOString(),
-            json: jsonString,
-            size: jsonString.length,
-            preview: jsonString.substring(0, 100).replace(/\s+/g, ' ')
+            type: type,
+            data: data
         };
 
-        // Check if same JSON already exists (avoid duplicates)
-        const existingIndex = this.history.findIndex(h => h.json === jsonString);
+        // Determine uniqueness and preview based on type
+        let uniqueKey;
+        if (type === 'json') {
+            uniqueKey = data.content;
+            entry.size = data.content.length;
+            entry.preview = data.content.substring(0, 100).replace(/\s+/g, ' ');
+        } else if (type === 'compare') {
+            uniqueKey = data.original + '|' + data.modified;
+            entry.size = data.original.length + data.modified.length;
+            entry.preview = `Compare: ${data.original.substring(0, 30)}... vs ${data.modified.substring(0, 30)}...`.replace(/\s+/g, ' ');
+        }
+
+        // Check duplicates
+        const existingIndex = this.history.findIndex(h => {
+            if (h.type !== type) return false;
+            if (type === 'json') return h.data.content === uniqueKey;
+            if (type === 'compare') return (h.data.original + '|' + h.data.modified) === uniqueKey;
+            return false;
+        });
+
         if (existingIndex >= 0) {
-            // Move to top
             this.history.splice(existingIndex, 1);
         }
 
-        // Add to beginning
         this.history.unshift(entry);
 
-        // Limit to max items
         if (this.history.length > this.maxHistoryItems) {
             this.history = this.history.slice(0, this.maxHistoryItems);
         }
@@ -948,12 +1063,29 @@ class JSONViewer {
 
     loadFromHistory(index) {
         const entry = this.history[index];
-        if (entry) {
-            this.jsonInput.value = entry.json;
+        if (!entry) return;
+
+        // Migrate old format if necessary
+        const type = entry.type || 'json';
+        const data = entry.data || { content: entry.json }; // Handle legacy
+
+        if (type === 'json') {
+            // Switch to JSON tab
+            document.querySelector('.nav-tab[data-tab="jsonViewer"]').click();
+
+            this.jsonInput.value = data.content;
             this.updateCharCount();
             this.formatAndView();
-            this.toggleHistory(); // Close sidebar
+        } else if (type === 'compare') {
+            // Switch to Compare tab
+            document.querySelector('.nav-tab[data-tab="textComparer"]').click();
+
+            this.originalInput.value = data.original;
+            this.modifiedInput.value = data.modified;
+            this.compareText(false); // Pass false to avoid saving to history again
         }
+
+        this.toggleHistory();
     }
 
     deleteFromHistory(index, event) {
@@ -985,15 +1117,29 @@ class JSONViewer {
             const date = new Date(entry.timestamp);
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-            const sizeStr = entry.size > 1000 ? `${(entry.size / 1000).toFixed(1)}KB` : `${entry.size}B`;
+
+            // Handle legacy format
+            let size = entry.size;
+            let preview = entry.preview;
+            let type = entry.type || 'json';
+
+            // If legacy data
+            if (!entry.data && entry.json) {
+                size = entry.json.length;
+                preview = entry.json.substring(0, 100).replace(/\s+/g, ' ');
+            }
+
+            const sizeStr = size > 1000 ? `${(size / 1000).toFixed(1)}KB` : `${size}B`;
+            const typeLabel = type === 'compare' ? '<span class="history-type type-compare">DIFF</span>' : '<span class="history-type type-json">JSON</span>';
 
             return `
                 <div class="history-item" data-index="${index}">
                     <div class="history-item-header">
                         <span class="history-time">${dateStr} ${timeStr}</span>
+                        ${typeLabel}
                         <span class="history-size">${sizeStr}</span>
                     </div>
-                    <div class="history-preview">${this.escapeHTML(entry.preview)}</div>
+                    <div class="history-preview">${this.escapeHTML(preview)}</div>
                     <button class="history-delete" data-index="${index}" title="Delete">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
