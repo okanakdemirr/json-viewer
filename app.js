@@ -38,6 +38,7 @@ class JSONViewer {
         this.fileInput = document.getElementById('fileInput');
         this.formatBtn = document.getElementById('formatBtn');
         this.pasteBtn = document.getElementById('pasteBtn');
+        this.copyInputBtn = document.getElementById('copyInputBtn');
         this.sampleBtn = document.getElementById('sampleBtn');
         this.clearBtn = document.getElementById('clearBtn');
         this.charCount = document.getElementById('charCount');
@@ -94,6 +95,7 @@ class JSONViewer {
         this.jsonInput.addEventListener('input', () => this.updateCharCount());
         this.formatBtn.addEventListener('click', () => this.formatAndView());
         this.pasteBtn.addEventListener('click', () => this.pasteFromClipboard());
+        this.copyInputBtn.addEventListener('click', () => this.copyInputToClipboard());
         this.clearBtn.addEventListener('click', () => this.clearAll());
         this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
 
@@ -251,6 +253,32 @@ class JSONViewer {
             this.updateCharCount();
         } catch (err) {
             this.showError('Unable to paste from clipboard. Please paste manually.');
+        }
+    }
+
+    async copyInputToClipboard() {
+        const text = this.jsonInput.value;
+        if (!text) return;
+
+        try {
+            await navigator.clipboard.writeText(text);
+
+            // Visual feedback
+            const originalContent = this.copyInputBtn.innerHTML;
+            this.copyInputBtn.classList.add('copied');
+            this.copyInputBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Copied!
+            `;
+
+            setTimeout(() => {
+                this.copyInputBtn.classList.remove('copied');
+                this.copyInputBtn.innerHTML = originalContent;
+            }, 1500);
+        } catch (err) {
+            this.showError('Failed to copy to clipboard');
         }
     }
 

@@ -252,6 +252,12 @@ body::before {
     border-color: var(--accent-secondary);
 }
 
+.btn.copied {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
 /* View Toggle */
 .view-toggle {
     display: flex;
