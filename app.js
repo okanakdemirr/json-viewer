@@ -20,7 +20,7 @@ class JSONViewer {
 
         // History state
         this.history = [];
-        this.maxHistoryItems = 20;
+        this.maxHistoryItems = 10;
         this.historyKey = 'json-viewer-history';
 
         this.init();
@@ -400,8 +400,8 @@ class JSONViewer {
         this.stats = { keys: 0, arrays: 0, objects: 0, urls: 0, images: 0 };
         this.imageData = [];
 
-        // Render tree view
-        this.jsonOutput.innerHTML = this.createTreeHTML(this.jsonData, '', true);
+        // Render tree view with lazy rendering (depth > 2 starts collapsed)
+        this.jsonOutput.innerHTML = this.createTreeHTML(this.jsonData, '', true, 0);
 
         // Render raw view
         this.rawOutput.textContent = JSON.stringify(this.jsonData, null, 2);
@@ -415,16 +415,20 @@ class JSONViewer {
         // Scroll to output section
         this.outputSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-        // Bind toggle events
+        // Bind toggle events (including lazy expand)
         this.bindToggleEvents();
 
         // Bind image click events
         this.bindImageEvents();
     }
 
-    createTreeHTML(data, path, isLast = true) {
+    createTreeHTML(data, path, isLast = true, depth = 0) {
         const type = this.getType(data);
         let html = '';
+        // Lazy rendering: nodes deeper than 2 levels start collapsed
+        // and their children HTML is deferred until expanded
+        const LAZY_DEPTH = 2;
+        const isLazy = depth > LAZY_DEPTH;
 
         if (type === 'object') {
             this.stats.objects++;
@@ -435,35 +439,41 @@ class JSONViewer {
 
             if (!isEmpty) {
                 html += `<span class="json-count">${keys.length} ${keys.length === 1 ? 'key' : 'keys'}</span>`;
-                html += `<div class="json-children" data-path="${path}">`;
 
-                keys.forEach((key, index) => {
-                    const isLastItem = index === keys.length - 1;
-                    const childPath = path ? `${path}.${key}` : key;
-                    this.stats.keys++;
+                if (isLazy) {
+                    // Deferred: store data reference, render on expand
+                    html += `<div class="json-children collapsed" data-path="${path}" data-lazy="true">`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="json-children" data-path="${path}">`;
 
-                    html += `<div class="json-line">`;
+                    keys.forEach((key, index) => {
+                        const isLastItem = index === keys.length - 1;
+                        const childPath = path ? `${path}.${key}` : key;
+                        this.stats.keys++;
 
-                    // Add toggle button for nested objects/arrays
-                    const childType = this.getType(data[key]);
-                    if (childType === 'object' || childType === 'array') {
-                        html += `<button class="json-toggle" data-path="${childPath}">−</button>`;
-                    } else {
-                        html += `<span style="width: 22px; display: inline-block;"></span>`;
-                    }
+                        html += `<div class="json-line">`;
 
-                    html += `<span class="json-key">"${this.escapeHTML(key)}"</span>`;
-                    html += `<span class="json-colon">:</span>`;
-                    html += this.createTreeHTML(data[key], childPath, isLastItem);
+                        const childType = this.getType(data[key]);
+                        if (childType === 'object' || childType === 'array') {
+                            html += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                        } else {
+                            html += `<span style="width: 22px; display: inline-block;"></span>`;
+                        }
 
-                    if (!isLastItem) {
-                        html += `<span class="json-comma">,</span>`;
-                    }
+                        html += `<span class="json-key">"${this.escapeHTML(key)}"</span>`;
+                        html += `<span class="json-colon">:</span>`;
+                        html += this.createTreeHTML(data[key], childPath, isLastItem, depth + 1);
+
+                        if (!isLastItem) {
+                            html += `<span class="json-comma">,</span>`;
+                        }
+
+                        html += `</div>`;
+                    });
 
                     html += `</div>`;
-                });
-
-                html += `</div>`;
+                }
             }
 
             html += `<span class="json-bracket">}</span>`;
@@ -483,33 +493,38 @@ class JSONViewer {
                     html += this.createImagePreview(imageUrls);
                 }
 
-                html += `<div class="json-children" data-path="${path}">`;
+                if (isLazy) {
+                    html += `<div class="json-children collapsed" data-path="${path}" data-lazy="true">`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="json-children" data-path="${path}">`;
 
-                data.forEach((item, index) => {
-                    const isLastItem = index === data.length - 1;
-                    const childPath = `${path}[${index}]`;
+                    data.forEach((item, index) => {
+                        const isLastItem = index === data.length - 1;
+                        const childPath = `${path}[${index}]`;
 
-                    html += `<div class="json-line">`;
+                        html += `<div class="json-line">`;
 
-                    const childType = this.getType(item);
-                    if (childType === 'object' || childType === 'array') {
-                        html += `<button class="json-toggle" data-path="${childPath}">−</button>`;
-                    } else {
-                        html += `<span style="width: 22px; display: inline-block;"></span>`;
-                    }
+                        const childType = this.getType(item);
+                        if (childType === 'object' || childType === 'array') {
+                            html += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                        } else {
+                            html += `<span style="width: 22px; display: inline-block;"></span>`;
+                        }
 
-                    html += `<span class="json-key">[${index}]</span>`;
-                    html += `<span class="json-colon">:</span>`;
-                    html += this.createTreeHTML(item, childPath, isLastItem);
+                        html += `<span class="json-key">[${index}]</span>`;
+                        html += `<span class="json-colon">:</span>`;
+                        html += this.createTreeHTML(item, childPath, isLastItem, depth + 1);
 
-                    if (!isLastItem) {
-                        html += `<span class="json-comma">,</span>`;
-                    }
+                        if (!isLastItem) {
+                            html += `<span class="json-comma">,</span>`;
+                        }
+
+                        html += `</div>`;
+                    });
 
                     html += `</div>`;
-                });
-
-                html += `</div>`;
+                }
             }
 
             html += `<span class="json-bracket">]</span>`;
@@ -557,7 +572,8 @@ class JSONViewer {
         imageItems.forEach(item => {
             const index = this.imageData.findIndex(d => d.url === item.url && d.path === item.path);
             const actualIndex = index >= 0 ? index : this.imageData.length - 1;
-            html += `<img class="image-thumb" src="${this.escapeHTML(item.url)}" data-index="${actualIndex}" alt="Preview" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
+            const thumbUrl = this.getThumbnailUrl(item.url);
+            html += `<img class="image-thumb" src="${this.escapeHTML(thumbUrl)}" data-index="${actualIndex}" data-full-url="${this.escapeHTML(item.url)}" alt="Preview" referrerpolicy="no-referrer" loading="lazy" onerror="this.style.display='none'">`;
         });
         html += '</div>';
         return html;
@@ -620,10 +636,36 @@ class JSONViewer {
         return url.substring(0, maxLength - 3) + '...';
     }
 
+    // Return a smaller thumbnail URL for supported image hosts
+    getThumbnailUrl(url) {
+        try {
+            const u = new URL(url);
+            // Unsplash: append w=150 for small thumbnails
+            if (u.hostname.includes('unsplash.com')) {
+                u.searchParams.set('w', '150');
+                u.searchParams.set('q', '60');
+                return u.toString();
+            }
+            // Picsum: rewrite dimensions in path
+            if (u.hostname.includes('picsum.photos')) {
+                return url.replace(/\/\d+(\/\d+)?/, '/150/100');
+            }
+            // Placeholder services: rewrite dimensions
+            if (u.hostname.includes('placehold.co') || u.hostname.includes('via.placeholder.com')) {
+                return url.replace(/\/\d+x?\d*/, '/150x100');
+            }
+        } catch (e) {
+            // Fall through
+        }
+        return url;
+    }
+
     escapeHTML(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     updateStats() {
@@ -651,7 +693,97 @@ class JSONViewer {
         if (children) {
             const isCollapsed = children.classList.toggle('collapsed');
             button.textContent = isCollapsed ? '+' : '−';
+
+            // Lazy rendering: if this node hasn't been rendered yet, render it now
+            if (!isCollapsed && children.getAttribute('data-lazy') === 'true') {
+                children.removeAttribute('data-lazy');
+                const nodeData = this.getDataAtPath(path);
+                if (nodeData !== undefined) {
+                    // Render the children content
+                    const depth = path.split(/[.\[\]]/).filter(Boolean).length;
+                    let childHTML = '';
+                    const type = this.getType(nodeData);
+
+                    if (type === 'object') {
+                        const keys = Object.keys(nodeData);
+                        keys.forEach((key, index) => {
+                            const isLastItem = index === keys.length - 1;
+                            const childPath = path ? `${path}.${key}` : key;
+
+                            childHTML += `<div class="json-line">`;
+                            const childType = this.getType(nodeData[key]);
+                            if (childType === 'object' || childType === 'array') {
+                                childHTML += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                            } else {
+                                childHTML += `<span style="width: 22px; display: inline-block;"></span>`;
+                            }
+                            childHTML += `<span class="json-key">"${this.escapeHTML(key)}"</span>`;
+                            childHTML += `<span class="json-colon">:</span>`;
+                            childHTML += this.createTreeHTML(nodeData[key], childPath, isLastItem, depth + 1);
+                            if (!isLastItem) childHTML += `<span class="json-comma">,</span>`;
+                            childHTML += `</div>`;
+                        });
+                    } else if (type === 'array') {
+                        nodeData.forEach((item, index) => {
+                            const isLastItem = index === nodeData.length - 1;
+                            const childPath = `${path}[${index}]`;
+
+                            childHTML += `<div class="json-line">`;
+                            const childType = this.getType(item);
+                            if (childType === 'object' || childType === 'array') {
+                                childHTML += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                            } else {
+                                childHTML += `<span style="width: 22px; display: inline-block;"></span>`;
+                            }
+                            childHTML += `<span class="json-key">[${index}]</span>`;
+                            childHTML += `<span class="json-colon">:</span>`;
+                            childHTML += this.createTreeHTML(item, childPath, isLastItem, depth + 1);
+                            if (!isLastItem) childHTML += `<span class="json-comma">,</span>`;
+                            childHTML += `</div>`;
+                        });
+                    }
+
+                    children.innerHTML = childHTML;
+                    // Rebind events for newly rendered nodes
+                    children.querySelectorAll('.json-toggle').forEach(toggle => {
+                        toggle.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.toggleNode(toggle);
+                        });
+                    });
+                    children.querySelectorAll('.image-thumb').forEach(thumb => {
+                        thumb.addEventListener('click', () => {
+                            const idx = parseInt(thumb.getAttribute('data-index'));
+                            this.openImageGallery(idx);
+                        });
+                    });
+                    children.querySelectorAll('.json-url').forEach(url => {
+                        url.addEventListener('click', () => {
+                            const urlStr = url.getAttribute('data-url');
+                            const pathStr = url.getAttribute('data-path');
+                            if (this.isImageUrl(urlStr)) {
+                                const idx = this.imageData.findIndex(d => d.url === urlStr);
+                                if (idx >= 0) this.openImageGallery(idx);
+                            } else {
+                                window.open(urlStr, '_blank');
+                            }
+                        });
+                    });
+                }
+            }
         }
+    }
+
+    // Navigate the parsed JSON data to find data at a dot/bracket path
+    getDataAtPath(path) {
+        if (!path) return this.jsonData;
+        const parts = path.match(/[^.\[\]]+/g);
+        let current = this.jsonData;
+        for (const part of parts) {
+            if (current === null || current === undefined) return undefined;
+            current = current[part];
+        }
+        return current;
     }
 
     bindImageEvents() {
@@ -774,11 +906,71 @@ class JSONViewer {
     }
 
     expandAll() {
+        // First, expand all lazy nodes by triggering their rendering
+        const lazyNodes = this.jsonOutput.querySelectorAll('.json-children[data-lazy="true"]');
+        lazyNodes.forEach(child => {
+            const path = child.getAttribute('data-path');
+            const toggle = this.jsonOutput.querySelector(`.json-toggle[data-path="${path}"]`);
+            if (toggle) {
+                // Simulate expanding to trigger lazy render
+                child.classList.remove('collapsed');
+                child.removeAttribute('data-lazy');
+                const nodeData = this.getDataAtPath(path);
+                if (nodeData !== undefined) {
+                    const depth = path.split(/[.\[\]]/).filter(Boolean).length;
+                    let childHTML = '';
+                    const type = this.getType(nodeData);
+                    if (type === 'object') {
+                        const keys = Object.keys(nodeData);
+                        keys.forEach((key, index) => {
+                            const isLastItem = index === keys.length - 1;
+                            const childPath = path ? `${path}.${key}` : key;
+                            childHTML += `<div class="json-line">`;
+                            const childType = this.getType(nodeData[key]);
+                            if (childType === 'object' || childType === 'array') {
+                                childHTML += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                            } else {
+                                childHTML += `<span style="width: 22px; display: inline-block;"></span>`;
+                            }
+                            childHTML += `<span class="json-key">"${this.escapeHTML(key)}"</span>`;
+                            childHTML += `<span class="json-colon">:</span>`;
+                            childHTML += this.createTreeHTML(nodeData[key], childPath, isLastItem, depth + 1);
+                            if (!isLastItem) childHTML += `<span class="json-comma">,</span>`;
+                            childHTML += `</div>`;
+                        });
+                    } else if (type === 'array') {
+                        nodeData.forEach((item, index) => {
+                            const isLastItem = index === nodeData.length - 1;
+                            const childPath = `${path}[${index}]`;
+                            childHTML += `<div class="json-line">`;
+                            const childType = this.getType(item);
+                            if (childType === 'object' || childType === 'array') {
+                                childHTML += `<button class="json-toggle" data-path="${childPath}">−</button>`;
+                            } else {
+                                childHTML += `<span style="width: 22px; display: inline-block;"></span>`;
+                            }
+                            childHTML += `<span class="json-key">[${index}]</span>`;
+                            childHTML += `<span class="json-colon">:</span>`;
+                            childHTML += this.createTreeHTML(item, childPath, isLastItem, depth + 1);
+                            if (!isLastItem) childHTML += `<span class="json-comma">,</span>`;
+                            childHTML += `</div>`;
+                        });
+                    }
+                    child.innerHTML = childHTML;
+                }
+                toggle.textContent = '−';
+            }
+        });
+
+        // Now expand all (including newly created) and rebind events
         const children = this.jsonOutput.querySelectorAll('.json-children');
         const toggles = this.jsonOutput.querySelectorAll('.json-toggle');
-
         children.forEach(child => child.classList.remove('collapsed'));
         toggles.forEach(toggle => toggle.textContent = '−');
+
+        // Rebind all events for newly rendered nodes
+        this.bindToggleEvents();
+        this.bindImageEvents();
     }
 
     collapseAll() {
