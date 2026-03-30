@@ -463,6 +463,12 @@ body::before {
     border-color: var(--border-hover);
 }
 
+.json-toggle-spacer {
+    width: 22px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
 .json-key {
     color: var(--json-key);
     font-weight: 500;
@@ -1181,11 +1187,6 @@ del {
     color: var(--text-muted);
     font-size: 12px;
     border-top: 1px solid var(--border-color);
-}
-
-/* Utility Classes */
-.hidden {
-    display: none !important;
 }
 
 /* Scrollbar Styling */
