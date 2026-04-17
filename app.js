@@ -1101,11 +1101,13 @@ class JSONViewer {
 
     clearSearchHighlights() {
         const marks = this.jsonOutput.querySelectorAll('mark.search-match');
+        if (marks.length === 0) return;
+        const parents = new Set();
         marks.forEach(mark => {
-            const parent = mark.parentNode;
-            parent.replaceChild(document.createTextNode(mark.textContent), mark);
-            parent.normalize();
+            parents.add(mark.parentNode);
+            mark.replaceWith(document.createTextNode(mark.textContent));
         });
+        parents.forEach(parent => parent.normalize());
     }
 
     // ==================== HISTORY METHODS ====================
