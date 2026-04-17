@@ -58,7 +58,6 @@ class JSONViewer {
         this.formatBtn = document.getElementById('formatBtn');
         this.pasteBtn = document.getElementById('pasteBtn');
         this.copyInputBtn = document.getElementById('copyInputBtn');
-        this.sampleBtn = document.getElementById('sampleBtn');
         this.clearBtn = document.getElementById('clearBtn');
         this.charCount = document.getElementById('charCount');
         this.errorMessage = document.getElementById('errorMessage');
@@ -255,14 +254,21 @@ class JSONViewer {
         this.pasteOriginalBtn = document.getElementById('pasteOriginalBtn');
         this.pasteModifiedBtn = document.getElementById('pasteModifiedBtn');
 
-        this.compareBtn.addEventListener('click', () => this.compareText());
+        if (typeof Diff === 'undefined') {
+            this.compareBtn.disabled = true;
+            this.compareBtn.title = 'Diff library failed to load';
+            this.diffResult.textContent = 'Diff library failed to load. The comparer is unavailable.';
+            this.compareOutput.classList.remove('hidden');
+        } else {
+            this.compareBtn.addEventListener('click', () => this.compareText());
+        }
         this.clearCompareBtn.addEventListener('click', () => this.clearComparer());
 
         this.pasteOriginalBtn.addEventListener('click', async () => {
             try {
                 this.originalInput.value = await navigator.clipboard.readText();
             } catch (e) {
-                alert('Failed to paste content');
+                this.showToast('Failed to paste content');
             }
         });
 
@@ -270,7 +276,7 @@ class JSONViewer {
             try {
                 this.modifiedInput.value = await navigator.clipboard.readText();
             } catch (e) {
-                alert('Failed to paste content');
+                this.showToast('Failed to paste content');
             }
         });
     }
@@ -303,7 +309,7 @@ class JSONViewer {
             this.compareOutput.classList.remove('hidden');
         } catch (err) {
             console.error(err);
-            alert('Comparison failed: ' + err.message);
+            this.showToast('Comparison failed: ' + err.message);
         }
 
         if (saveToHistory) {
@@ -333,95 +339,35 @@ class JSONViewer {
         }
     }
 
-    async copyInputToClipboard() {
-        const text = this.jsonInput.value;
-        if (!text) return;
-
+    async _copyWithFeedback(text, button, { successHTML = null, className = 'copied', duration = 1500 } = {}) {
         try {
             await navigator.clipboard.writeText(text);
-
-            // Visual feedback
-            const originalContent = this.copyInputBtn.innerHTML;
-            this.copyInputBtn.classList.add('copied');
-            this.copyInputBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Copied!
-            `;
-
+            const originalHTML = successHTML ? button.innerHTML : null;
+            if (successHTML) button.innerHTML = successHTML;
+            if (className) button.classList.add(className);
             setTimeout(() => {
-                this.copyInputBtn.classList.remove('copied');
-                this.copyInputBtn.innerHTML = originalContent;
-            }, 1500);
+                if (className) button.classList.remove(className);
+                if (successHTML) button.innerHTML = originalHTML;
+            }, duration);
+            return true;
         } catch (err) {
-            this.showError('Failed to copy to clipboard');
+            console.error('Failed to copy:', err);
+            return false;
         }
     }
 
-    loadSample() {
-        const sampleData = {
-            "product": {
-                "id": "prod_12345",
-                "name": "Premium Headphones",
-                "description": "High-quality wireless headphones with noise cancellation",
-                "price": 299.99,
-                "inStock": true,
-                "category": null,
-                "images": [
-                    "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400",
-                    "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=400",
-                    "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=400"
-                ],
-                "thumbnail": "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=200"
-            },
-            "reviews": [
-                {
-                    "user": "John Doe",
-                    "avatar": "https://randomuser.me/api/portraits/men/1.jpg",
-                    "rating": 5,
-                    "comment": "Amazing sound quality!"
-                },
-                {
-                    "user": "Jane Smith",
-                    "avatar": "https://randomuser.me/api/portraits/women/2.jpg",
-                    "rating": 4,
-                    "comment": "Great product, comfortable fit."
-                }
-            ],
-            "relatedProducts": [
-                {
-                    "id": "prod_67890",
-                    "name": "Headphone Stand",
-                    "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300",
-                    "price": 49.99
-                },
-                {
-                    "id": "prod_11111",
-                    "name": "Carrying Case",
-                    "image": "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?w=300",
-                    "price": 29.99
-                }
-            ],
-            "specifications": {
-                "brand": "AudioPro",
-                "model": "WH-1000XM5",
-                "connectivity": ["Bluetooth 5.2", "3.5mm Jack", "USB-C"],
-                "batteryLife": "30 hours",
-                "weight": "250g",
-                "colors": ["Black", "Silver", "Midnight Blue"]
-            },
-            "metadata": {
-                "createdAt": "2024-01-15T10:30:00Z",
-                "updatedAt": "2024-01-20T15:45:00Z",
-                "views": 12543,
-                "salesCount": 847
-            }
-        };
-
-        this.jsonInput.value = JSON.stringify(sampleData, null, 2);
-        this.updateCharCount();
-        this.formatAndView();
+    async copyInputToClipboard() {
+        const text = this.jsonInput.value;
+        if (!text) return;
+        const ok = await this._copyWithFeedback(text, this.copyInputBtn, {
+            successHTML: `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Copied!
+            `
+        });
+        if (!ok) this.showError('Failed to copy to clipboard');
     }
 
     clearAll() {
@@ -472,30 +418,49 @@ class JSONViewer {
         this.errorMessage.classList.remove('hidden');
     }
 
+    showToast(message, kind = 'error', duration = 3000) {
+        if (!this._toastContainer) {
+            this._toastContainer = document.createElement('div');
+            this._toastContainer.className = 'toast-container';
+            this._toastContainer.setAttribute('role', 'status');
+            this._toastContainer.setAttribute('aria-live', 'polite');
+            document.body.appendChild(this._toastContainer);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${kind}`;
+        toast.textContent = message;
+        this._toastContainer.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('visible'));
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+            // Safety net if transitionend never fires (e.g., reduced motion).
+            setTimeout(() => toast.remove(), 400);
+        }, duration);
+    }
+
     renderJSON() {
-        // Reset stats
         this.stats = { keys: 0, arrays: 0, objects: 0, urls: 0, images: 0 };
         this.imageData = [];
 
-        // Render tree view
-        this.jsonOutput.innerHTML = this.createTreeHTML(this.jsonData, '', true, 0);
-
-        // Render raw view
+        this.jsonOutput.replaceChildren(this.createTreeNode(this.jsonData, '', true, 0));
         this.rawOutput.textContent = JSON.stringify(this.jsonData, null, 2);
 
-        // Update stats
         this.updateStats();
-
-        // Show output section
         this.outputSection.classList.remove('hidden');
-
-        // Scroll to output section
         this.outputSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    createTreeHTML(data, path, isLast = true, depth = 0) {
+    _span(className, text) {
+        const el = document.createElement('span');
+        el.className = className;
+        el.textContent = text;
+        return el;
+    }
+
+    createTreeNode(data, path, isLast = true, depth = 0) {
+        const fragment = document.createDocumentFragment();
         const type = this.getType(data);
-        let html = '';
 
         if (type === 'object') {
             this.stats.objects++;
@@ -503,110 +468,115 @@ class JSONViewer {
             const isEmpty = keys.length === 0;
             const isLazy = depth > this.LAZY_DEPTH || keys.length > this.LAZY_SIBLING_COUNT;
 
-            html += `<span class="json-bracket">{</span>`;
+            fragment.appendChild(this._span('json-bracket', '{'));
 
             if (!isEmpty) {
-                html += `<span class="json-count">${keys.length} ${keys.length === 1 ? 'key' : 'keys'}</span>`;
-
+                fragment.appendChild(this._span('json-count', `${keys.length} ${keys.length === 1 ? 'key' : 'keys'}`));
+                const children = document.createElement('div');
+                children.className = isLazy ? 'json-children collapsed' : 'json-children';
+                children.setAttribute('data-path', path);
                 if (isLazy) {
-                    html += `<div class="json-children collapsed" data-path="${path}" data-lazy="true"></div>`;
+                    children.setAttribute('data-lazy', 'true');
                 } else {
-                    html += `<div class="json-children" data-path="${path}">`;
                     keys.forEach((key, index) => {
                         const isLastItem = index === keys.length - 1;
                         const childPath = path ? `${path}.${key}` : key;
                         this.stats.keys++;
-                        html += this._buildChildLineHTML(data[key], childPath, `"${this.escapeHTML(key)}"`, isLastItem, depth + 1);
+                        children.appendChild(this._buildChildLine(data[key], childPath, `"${key}"`, isLastItem, depth + 1));
                     });
-                    html += `</div>`;
                 }
+                fragment.appendChild(children);
             }
 
-            html += `<span class="json-bracket">}</span>`;
+            fragment.appendChild(this._span('json-bracket', '}'));
 
         } else if (type === 'array') {
             this.stats.arrays++;
             const isEmpty = data.length === 0;
             const isLazy = depth > this.LAZY_DEPTH || data.length > this.LAZY_SIBLING_COUNT;
 
-            html += `<span class="json-bracket">[</span>`;
+            fragment.appendChild(this._span('json-bracket', '['));
 
             if (!isEmpty) {
-                html += `<span class="json-count">${data.length} ${data.length === 1 ? 'item' : 'items'}</span>`;
-
-                // Check if array contains image URLs
-                const imageUrls = this.extractImageUrls(data);
-                if (imageUrls.length > 0) {
-                    html += this.createImagePreview(imageUrls);
-                }
-
+                fragment.appendChild(this._span('json-count', `${data.length} ${data.length === 1 ? 'item' : 'items'}`));
+                const children = document.createElement('div');
+                children.className = isLazy ? 'json-children collapsed' : 'json-children';
+                children.setAttribute('data-path', path);
                 if (isLazy) {
-                    html += `<div class="json-children collapsed" data-path="${path}" data-lazy="true"></div>`;
+                    children.setAttribute('data-lazy', 'true');
                 } else {
-                    html += `<div class="json-children" data-path="${path}">`;
                     data.forEach((item, index) => {
                         const isLastItem = index === data.length - 1;
                         const childPath = `${path}[${index}]`;
-                        html += this._buildChildLineHTML(item, childPath, `[${index}]`, isLastItem, depth + 1);
+                        children.appendChild(this._buildChildLine(item, childPath, `[${index}]`, isLastItem, depth + 1));
                     });
-                    html += `</div>`;
                 }
+                fragment.appendChild(children);
             }
 
-            html += `<span class="json-bracket">]</span>`;
+            fragment.appendChild(this._span('json-bracket', ']'));
 
         } else if (type === 'string') {
             const isUrl = this.isUrl(data);
-            const isImageUrl = this.isImageUrl(data);
+            const isImage = this.isImageUrl(data);
 
             if (isUrl) {
                 this.stats.urls++;
-                if (isImageUrl) {
+                if (isImage) {
                     this.stats.images++;
                     this.imageData.push({ url: data, path: path });
                 }
 
-                // Hide image URL text when images are shown (default)
-                const hideStyle = isImageUrl && this.showImages ? ' style="display: none"' : '';
-                html += `<span class="json-string json-url" data-url="${this.escapeHTML(data)}" data-path="${this.escapeHTML(path)}" title="Click to ${isImageUrl ? 'preview' : 'open'}"${hideStyle}>"${this.escapeHTML(this.truncateUrl(data))}"</span>`;
+                const urlSpan = document.createElement('span');
+                urlSpan.className = 'json-string json-url';
+                urlSpan.setAttribute('data-url', data);
+                urlSpan.setAttribute('data-path', path);
+                urlSpan.setAttribute('title', `Click to ${isImage ? 'preview' : 'open'}`);
+                if (isImage && this.showImages) urlSpan.style.display = 'none';
+                urlSpan.textContent = `"${this.truncateUrl(data)}"`;
+                fragment.appendChild(urlSpan);
 
-                // Add inline image preview for single image URLs
-                if (isImageUrl) {
-                    html += this.createImagePreview([{ url: data, path: path }]);
+                if (isImage) {
+                    fragment.appendChild(this.createImagePreviewNode([{ url: data, path: path }]));
                 }
             } else {
-                html += `<span class="json-string">"${this.escapeHTML(data)}"</span>`;
+                fragment.appendChild(this._span('json-string', `"${data}"`));
             }
 
         } else if (type === 'number') {
-            html += `<span class="json-number">${data}</span>`;
-
+            fragment.appendChild(this._span('json-number', String(data)));
         } else if (type === 'boolean') {
-            html += `<span class="json-boolean">${data}</span>`;
-
+            fragment.appendChild(this._span('json-boolean', String(data)));
         } else if (type === 'null') {
-            html += `<span class="json-null">null</span>`;
+            fragment.appendChild(this._span('json-null', 'null'));
         }
 
-        return html;
+        return fragment;
     }
 
-    createImagePreview(imageItems) {
-        if (imageItems.length === 0) return '';
+    createImagePreviewNode(imageItems) {
+        const fragment = document.createDocumentFragment();
+        if (imageItems.length === 0) return fragment;
 
-        let html = '<div class="json-image-preview">';
+        const container = document.createElement('div');
+        container.className = 'json-image-preview';
         imageItems.forEach(item => {
+            if (!item || !item.url) return;
             const index = this.imageData.findIndex(d => d.url === item.url && d.path === item.path);
             const actualIndex = index >= 0 ? index : this.imageData.length - 1;
-            const thumbUrl = this.getThumbnailUrl(item.url);
-            html += `<img class="image-thumb" src="${this.escapeHTML(thumbUrl)}" data-index="${actualIndex}" data-full-url="${this.escapeHTML(item.url)}" alt="Preview" referrerpolicy="no-referrer" loading="lazy" onerror="this.classList.add('hidden')">`;
+            const img = document.createElement('img');
+            img.className = 'image-thumb';
+            img.src = this.getThumbnailUrl(item.url);
+            img.setAttribute('data-index', String(actualIndex));
+            img.setAttribute('data-full-url', item.url);
+            img.alt = 'Preview';
+            img.referrerPolicy = 'no-referrer';
+            img.loading = 'lazy';
+            img.addEventListener('error', () => img.classList.add('hidden'));
+            container.appendChild(img);
         });
-        html += '</div>';
-        return html;
-    }
-
-    extractImageUrls(arr) {
-        return arr.filter(item => typeof item === 'string' && this.isImageUrl(item));
+        fragment.appendChild(container);
+        return fragment;
     }
 
     getType(value) {
@@ -670,14 +640,6 @@ class JSONViewer {
         return url;
     }
 
-    escapeHTML(str) {
-        if (str === null || str === undefined) return '';
-        return String(str).replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
     updateStats() {
         this.keyCountEl.textContent = this.stats.keys.toLocaleString();
         this.arrayCountEl.textContent = this.stats.arrays.toLocaleString();
@@ -707,42 +669,50 @@ class JSONViewer {
         if (nodeData === undefined) return;
 
         const depth = path.split(/[.\[\]]/).filter(Boolean).length;
-        let html = '';
         const type = this.getType(nodeData);
+        const fragment = document.createDocumentFragment();
 
         if (type === 'object') {
             const keys = Object.keys(nodeData);
             keys.forEach((key, index) => {
                 const isLastItem = index === keys.length - 1;
                 const childPath = path ? `${path}.${key}` : key;
-                html += this._buildChildLineHTML(nodeData[key], childPath, `"${this.escapeHTML(key)}"`, isLastItem, depth + 1);
+                fragment.appendChild(this._buildChildLine(nodeData[key], childPath, `"${key}"`, isLastItem, depth + 1));
             });
         } else if (type === 'array') {
             nodeData.forEach((item, index) => {
                 const isLastItem = index === nodeData.length - 1;
                 const childPath = `${path}[${index}]`;
-                html += this._buildChildLineHTML(item, childPath, `[${index}]`, isLastItem, depth + 1);
+                fragment.appendChild(this._buildChildLine(item, childPath, `[${index}]`, isLastItem, depth + 1));
             });
         }
 
-        container.innerHTML = html;
+        container.replaceChildren(fragment);
     }
 
-    _buildChildLineHTML(data, childPath, keyLabel, isLast, depth) {
-        let html = `<div class="json-line">`;
+    _buildChildLine(data, childPath, keyLabel, isLast, depth) {
+        const line = document.createElement('div');
+        line.className = 'json-line';
         const childType = this.getType(data);
         if (childType === 'object' || childType === 'array') {
             const willBeLazy = this._willBeLazy(data, depth);
-            html += `<button class="json-toggle" data-path="${childPath}" aria-expanded="${willBeLazy ? 'false' : 'true'}" aria-label="Toggle children">${willBeLazy ? '+' : '−'}</button>`;
+            const toggle = document.createElement('button');
+            toggle.className = 'json-toggle';
+            toggle.setAttribute('data-path', childPath);
+            toggle.setAttribute('aria-expanded', willBeLazy ? 'false' : 'true');
+            toggle.setAttribute('aria-label', 'Toggle children');
+            toggle.textContent = willBeLazy ? '+' : '−';
+            line.appendChild(toggle);
         } else {
-            html += `<span class="json-toggle-spacer"></span>`;
+            const spacer = document.createElement('span');
+            spacer.className = 'json-toggle-spacer';
+            line.appendChild(spacer);
         }
-        html += `<span class="json-key">${keyLabel}</span>`;
-        html += `<span class="json-colon">:</span>`;
-        html += this.createTreeHTML(data, childPath, isLast, depth);
-        if (!isLast) html += `<span class="json-comma">,</span>`;
-        html += `</div>`;
-        return html;
+        line.appendChild(this._span('json-key', keyLabel));
+        line.appendChild(this._span('json-colon', ':'));
+        line.appendChild(this.createTreeNode(data, childPath, isLast, depth));
+        if (!isLast) line.appendChild(this._span('json-comma', ','));
+        return line;
     }
 
     _willBeLazy(data, depth) {
@@ -831,9 +801,16 @@ class JSONViewer {
     }
 
     renderGalleryThumbs() {
-        this.galleryThumbs.innerHTML = this.imageData.map((item, index) =>
-            `<img src="${this.escapeHTML(item.url)}" class="${index === this.currentImageIndex ? 'active' : ''}" data-index="${index}" alt="Thumbnail">`
-        ).join('');
+        const fragment = document.createDocumentFragment();
+        this.imageData.forEach((item, index) => {
+            const img = document.createElement('img');
+            img.src = item.url;
+            if (index === this.currentImageIndex) img.className = 'active';
+            img.setAttribute('data-index', String(index));
+            img.alt = 'Thumbnail';
+            fragment.appendChild(img);
+        });
+        this.galleryThumbs.replaceChildren(fragment);
     }
 
     navigateGallery(direction) {
@@ -848,18 +825,7 @@ class JSONViewer {
         const imageInfo = this.imageData[this.currentImageIndex];
         const text = type === 'path' ? imageInfo.path : imageInfo.url;
         const btn = type === 'path' ? this.copyPathBtn : this.copyUrlBtn;
-
-        try {
-            await navigator.clipboard.writeText(text);
-
-            // Visual feedback
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.classList.remove('copied');
-            }, 1500);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
+        await this._copyWithFeedback(text, btn);
     }
 
     switchView(view) {
@@ -969,25 +935,16 @@ class JSONViewer {
     }
 
     async copyToClipboard() {
-        try {
-            const text = JSON.stringify(this.jsonData, null, 2);
-            await navigator.clipboard.writeText(text);
-
-            // Show feedback
-            const originalText = this.copyBtn.innerHTML;
-            this.copyBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        const text = JSON.stringify(this.jsonData, null, 2);
+        await this._copyWithFeedback(text, this.copyBtn, {
+            className: null,
+            successHTML: `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
                     <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 Copied!
-            `;
-
-            setTimeout(() => {
-                this.copyBtn.innerHTML = originalText;
-            }, 1500);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
+            `
+        });
     }
 
     handleKeyboard(e) {
@@ -1288,46 +1245,57 @@ class JSONViewer {
 
     renderHistory() {
         if (this.history.length === 0) {
-            this.historyList.innerHTML = '<div class="history-empty">No history yet</div>';
+            const empty = document.createElement('div');
+            empty.className = 'history-empty';
+            empty.textContent = 'No history yet';
+            this.historyList.replaceChildren(empty);
             return;
         }
 
-        this.historyList.innerHTML = this.history.map((entry, index) => {
+        const fragment = document.createDocumentFragment();
+        this.history.forEach((entry, index) => {
             const date = new Date(entry.timestamp);
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
-            // Handle legacy format
             let size = entry.size;
             let preview = entry.preview;
-            let type = entry.type || 'json';
+            const type = entry.type || 'json';
 
-            // If legacy data
             if (!entry.data && entry.json) {
                 size = entry.json.length;
                 preview = entry.json.substring(0, 100).replace(/\s+/g, ' ');
             }
 
             const sizeStr = size > 1000 ? `${(size / 1000).toFixed(1)}KB` : `${size}B`;
-            const typeLabel = type === 'compare' ? '<span class="history-type type-compare">DIFF</span>' : '<span class="history-type type-json">JSON</span>';
 
-            return `
-                <div class="history-item" data-index="${index}">
-                    <div class="history-item-header">
-                        <span class="history-time">${dateStr} ${timeStr}</span>
-                        ${typeLabel}
-                        <span class="history-size">${sizeStr}</span>
-                    </div>
-                    <div class="history-preview">${this.escapeHTML(preview)}</div>
-                    <button class="history-delete" data-index="${index}" title="Delete">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                    </button>
-                </div>
-            `;
-        }).join('');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.setAttribute('data-index', String(index));
+
+            const header = document.createElement('div');
+            header.className = 'history-item-header';
+            header.appendChild(this._span('history-time', `${dateStr} ${timeStr}`));
+            const typeLabel = document.createElement('span');
+            typeLabel.className = type === 'compare' ? 'history-type type-compare' : 'history-type type-json';
+            typeLabel.textContent = type === 'compare' ? 'DIFF' : 'JSON';
+            header.appendChild(typeLabel);
+            header.appendChild(this._span('history-size', sizeStr));
+            item.appendChild(header);
+
+            item.appendChild(this._span('history-preview', preview || ''));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'history-delete';
+            deleteBtn.setAttribute('data-index', String(index));
+            deleteBtn.setAttribute('title', 'Delete');
+            deleteBtn.setAttribute('aria-label', 'Delete history entry');
+            deleteBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            item.appendChild(deleteBtn);
+
+            fragment.appendChild(item);
+        });
+        this.historyList.replaceChildren(fragment);
     }
 }
 
