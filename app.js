@@ -844,25 +844,40 @@ class JSONViewer {
     }
 
     expandAll() {
-        // Expand all lazy nodes, including cascading ones created by prior expansions
-        let lazyNodes = this.jsonOutput.querySelectorAll('.json-children[data-lazy="true"]');
-        while (lazyNodes.length > 0) {
-            lazyNodes.forEach(child => {
+        // Expand lazy nodes level-by-level. Yields to the browser between levels via rAF
+        // so large trees don't block paint, and scopes the next-level search to newly
+        // inserted descendants instead of re-querying the entire tree.
+        this._expandGen = (this._expandGen || 0) + 1;
+        const gen = this._expandGen;
+        const finish = () => {
+            this.jsonOutput.querySelectorAll('.json-children.collapsed').forEach(el => el.classList.remove('collapsed'));
+            this.jsonOutput.querySelectorAll('.json-toggle').forEach(t => t.textContent = '−');
+        };
+        const processLevel = (nodes) => {
+            if (this._expandGen !== gen) return;
+            if (nodes.length === 0) {
+                finish();
+                return;
+            }
+            const nextLevel = [];
+            nodes.forEach(child => {
                 const path = child.getAttribute('data-path');
                 child.classList.remove('collapsed');
                 this.renderLazyChildren(path, child);
+                child.querySelectorAll('.json-children[data-lazy="true"]').forEach(d => nextLevel.push(d));
             });
-            lazyNodes = this.jsonOutput.querySelectorAll('.json-children[data-lazy="true"]');
-        }
-
-        // Expand all remaining collapsed nodes
-        const children = this.jsonOutput.querySelectorAll('.json-children');
-        const toggles = this.jsonOutput.querySelectorAll('.json-toggle');
-        children.forEach(child => child.classList.remove('collapsed'));
-        toggles.forEach(toggle => toggle.textContent = '−');
+            if (nextLevel.length > 0) {
+                requestAnimationFrame(() => processLevel(nextLevel));
+            } else {
+                finish();
+            }
+        };
+        processLevel(Array.from(this.jsonOutput.querySelectorAll('.json-children[data-lazy="true"]')));
     }
 
     collapseAll() {
+        // Cancel any in-flight expandAll that may still be walking rAF callbacks.
+        this._expandGen = (this._expandGen || 0) + 1;
         const children = this.jsonOutput.querySelectorAll('.json-children');
         const toggles = this.jsonOutput.querySelectorAll('.json-toggle');
 
