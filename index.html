@@ -49,16 +49,16 @@
             <div class="history-header">
                 <h3>History</h3>
                 <div class="history-actions">
-                    <button id="clearHistoryBtn" class="btn btn-danger btn-sm" title="Clear all history">
+                    <button id="clearHistoryBtn" class="btn btn-danger btn-sm" title="Clear all history" aria-label="Clear all history">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
+                            stroke-width="2" aria-hidden="true" focusable="false">
                             <polyline points="3 6 5 6 21 6" />
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                         </svg>
                     </button>
-                    <button id="closeHistoryBtn" class="btn btn-secondary btn-sm" title="Close">
+                    <button id="closeHistoryBtn" class="btn btn-secondary btn-sm" title="Close" aria-label="Close history sidebar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
+                            stroke-width="2" aria-hidden="true" focusable="false">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
@@ -234,33 +234,33 @@ Example:
                     </div>
 
                     <!-- Search Bar -->
-                    <div id="searchBar" class="search-bar hidden">
+                    <div id="searchBar" class="search-bar hidden" role="search">
                         <div class="search-input-wrapper">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
+                                stroke-width="2" aria-hidden="true" focusable="false">
                                 <circle cx="11" cy="11" r="8" />
                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
                             </svg>
                             <input type="text" id="searchInput" placeholder="Search keys and values..."
-                                autocomplete="off">
-                            <span id="searchCount" class="search-count"></span>
+                                autocomplete="off" aria-label="Search keys and values">
+                            <span id="searchCount" class="search-count" aria-live="polite" aria-atomic="true"></span>
                         </div>
                         <div class="search-nav">
-                            <button id="searchPrev" class="search-nav-btn" title="Previous (Shift+Enter)">
+                            <button id="searchPrev" class="search-nav-btn" title="Previous (Shift+Enter)" aria-label="Previous match">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
+                                    stroke-width="2" aria-hidden="true" focusable="false">
                                     <polyline points="18 15 12 9 6 15" />
                                 </svg>
                             </button>
-                            <button id="searchNext" class="search-nav-btn" title="Next (Enter)">
+                            <button id="searchNext" class="search-nav-btn" title="Next (Enter)" aria-label="Next match">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
+                                    stroke-width="2" aria-hidden="true" focusable="false">
                                     <polyline points="6 9 12 15 18 9" />
                                 </svg>
                             </button>
-                            <button id="searchClose" class="search-nav-btn" title="Close (Escape)">
+                            <button id="searchClose" class="search-nav-btn" title="Close (Escape)" aria-label="Close search">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
+                                    stroke-width="2" aria-hidden="true" focusable="false">
                                     <line x1="18" y1="6" x2="6" y2="18" />
                                     <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
@@ -319,19 +319,19 @@ Example:
             </div>
 
             <!-- Image Gallery (lightbox) -->
-            <div id="imageGallery" class="image-gallery hidden">
-                <button id="closeGallery" class="gallery-close">&times;</button>
+            <div id="imageGallery" class="image-gallery hidden" role="dialog" aria-modal="true" aria-label="Image preview">
+                <button id="closeGallery" class="gallery-close" aria-label="Close image preview">&times;</button>
                 <div class="gallery-content">
-                    <button id="prevImage" class="gallery-nav prev">&lt;</button>
+                    <button id="prevImage" class="gallery-nav prev" aria-label="Previous image">&lt;</button>
                     <div class="gallery-image-container">
-                        <img id="galleryImage" src="" alt="Preview">
+                        <img id="galleryImage" src="" alt="Image preview">
                         <div class="gallery-info">
                             <div class="gallery-info-row">
                                 <span class="gallery-label">Path:</span>
                                 <code id="galleryPath" class="gallery-path"></code>
-                                <button id="copyPathBtn" class="copy-btn" title="Copy path">
+                                <button id="copyPathBtn" class="copy-btn" title="Copy path" aria-label="Copy path to clipboard">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
+                                        stroke-width="2" aria-hidden="true" focusable="false">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                                     </svg>
@@ -340,9 +340,9 @@ Example:
                             <div class="gallery-info-row">
                                 <span class="gallery-label">URL:</span>
                                 <code id="galleryUrl" class="gallery-url"></code>
-                                <button id="copyUrlBtn" class="copy-btn" title="Copy URL">
+                                <button id="copyUrlBtn" class="copy-btn" title="Copy URL" aria-label="Copy URL to clipboard">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
+                                        stroke-width="2" aria-hidden="true" focusable="false">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                                     </svg>
@@ -350,7 +350,7 @@ Example:
                             </div>
                         </div>
                     </div>
-                    <button id="nextImage" class="gallery-nav next">&gt;</button>
+                    <button id="nextImage" class="gallery-nav next" aria-label="Next image">&gt;</button>
                 </div>
                 <div id="galleryThumbs" class="gallery-thumbs"></div>
             </div>

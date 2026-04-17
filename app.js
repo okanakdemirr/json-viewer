@@ -693,6 +693,7 @@ class JSONViewer {
         if (children) {
             const isCollapsed = children.classList.toggle('collapsed');
             button.textContent = isCollapsed ? '+' : '−';
+            button.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
 
             if (!isCollapsed && children.getAttribute('data-lazy') === 'true') {
                 this.renderLazyChildren(path, children);
@@ -732,7 +733,7 @@ class JSONViewer {
         const childType = this.getType(data);
         if (childType === 'object' || childType === 'array') {
             const willBeLazy = this._willBeLazy(data, depth);
-            html += `<button class="json-toggle" data-path="${childPath}">${willBeLazy ? '+' : '−'}</button>`;
+            html += `<button class="json-toggle" data-path="${childPath}" aria-expanded="${willBeLazy ? 'false' : 'true'}" aria-label="Toggle children">${willBeLazy ? '+' : '−'}</button>`;
         } else {
             html += `<span class="json-toggle-spacer"></span>`;
         }
@@ -772,16 +773,48 @@ class JSONViewer {
         this.renderGalleryThumbs();
         this.imageGallery.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
+
+        this._galleryLastFocused = document.activeElement;
+        if (!this._galleryKeyTrap) {
+            this._galleryKeyTrap = (e) => {
+                if (e.key !== 'Tab') return;
+                const focusable = this.imageGallery.querySelectorAll(
+                    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                );
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            };
+        }
+        this.imageGallery.addEventListener('keydown', this._galleryKeyTrap);
+        // Defer focus until after the browser paints the gallery visible.
+        requestAnimationFrame(() => this.closeGallery.focus());
     }
 
     closeImageGallery() {
         this.imageGallery.classList.add('hidden');
         document.body.style.overflow = '';
+        if (this._galleryKeyTrap) {
+            this.imageGallery.removeEventListener('keydown', this._galleryKeyTrap);
+        }
+        const target = this._galleryLastFocused;
+        this._galleryLastFocused = null;
+        if (target && typeof target.focus === 'function' && document.contains(target)) {
+            target.focus();
+        }
     }
 
     updateGalleryImage() {
         const imageInfo = this.imageData[this.currentImageIndex];
         this.galleryImage.src = imageInfo.url;
+        this.galleryImage.alt = imageInfo.path ? `Image at ${imageInfo.path}` : 'Image preview';
         this.galleryImage.referrerPolicy = "no-referrer";
         this.galleryPath.textContent = imageInfo.path || 'root';
         this.galleryUrl.textContent = imageInfo.url;
@@ -851,7 +884,10 @@ class JSONViewer {
         const gen = this._expandGen;
         const finish = () => {
             this.jsonOutput.querySelectorAll('.json-children.collapsed').forEach(el => el.classList.remove('collapsed'));
-            this.jsonOutput.querySelectorAll('.json-toggle').forEach(t => t.textContent = '−');
+            this.jsonOutput.querySelectorAll('.json-toggle').forEach(t => {
+                t.textContent = '−';
+                t.setAttribute('aria-expanded', 'true');
+            });
         };
         const processLevel = (nodes) => {
             if (this._expandGen !== gen) return;
@@ -882,7 +918,10 @@ class JSONViewer {
         const toggles = this.jsonOutput.querySelectorAll('.json-toggle');
 
         children.forEach(child => child.classList.add('collapsed'));
-        toggles.forEach(toggle => toggle.textContent = '+');
+        toggles.forEach(toggle => {
+            toggle.textContent = '+';
+            toggle.setAttribute('aria-expanded', 'false');
+        });
     }
 
     toggleImagePreviews() {
@@ -1104,7 +1143,10 @@ class JSONViewer {
                     parent.classList.remove('collapsed');
                     const path = parent.getAttribute('data-path');
                     const toggle = this.jsonOutput.querySelector(`.json-toggle[data-path="${path}"]`);
-                    if (toggle) toggle.textContent = '−';
+                    if (toggle) {
+                        toggle.textContent = '−';
+                        toggle.setAttribute('aria-expanded', 'true');
+                    }
                 }
                 parent = parent.parentElement;
             }
